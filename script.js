@@ -21,6 +21,8 @@ canvas.height = window.innerHeight;
 const keys = {};
 let enemies = [];
 const coins = [];
+const weapons = ["aura", "gun"];
+let projectiles = [];
 let coinTimer = 0;
 let enemySpawnTimer = 0;
 let lastTime = 0;
@@ -35,11 +37,22 @@ window.addEventListener("keyup", e => keys[e.key] = false);
 
 window.addEventListener("keydown", e => e.key == "r" ? location.reload() : null);
 
+window.addEventListener("mousedown", e => {
+  shoot(e);
+});
+
 const player = {
   x: 200,
   y: 200,
   size: 100,
+  collisionSize: 75,
   auraRadius: 200,
+  damage:10,
+  exp: 0,
+  expThreshold: 100,
+  level: 1,
+  weapon: "aura",
+  firing: false,
   speed: 2
 };
 
@@ -53,21 +66,50 @@ function spawnEnemy(){
     speed: 0.5
   })
 }
-function spawnCoin() {
+function spawnCoin(x = 0, y = 0) {
   coins.push({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
+    x: x ? x : Math.random() * canvas.width,
+    y: y ? y : Math.random() * canvas.height,
     size: 10
   });
 }
 function isColliding(a, b) {
   return (
     a.x < b.x + b.size &&
-    a.x + a.size > b.x &&
+    a.x + a.collisionSize > b.x &&
     a.y < b.y + b.size &&
-    a.y + a.size > b.y
+    a.y + a.collisionSize > b.y
   );
 }
+
+function shoot(e) {
+  const rect = canvas.getBoundingClientRect();
+
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  const playerCenterX = player.x + player.collisionSize / 2;
+  const playerCenterY = player.y + player.collisionSize / 2;
+
+  let dx = mouseX - playerCenterX;
+  let dy = mouseY - playerCenterY;
+
+  let dist = Math.sqrt(dx * dx + dy * dy);
+
+  dx /= dist;
+  dy /= dist;
+
+  projectiles.push({
+    x: playerCenterX,
+    y: playerCenterY,
+    dx: dx,
+    dy: dy,
+    speed: 6,
+    size: 8,
+    damage: 25
+  });
+}
+
 function update(dt) {
   if (gameOver) return
   if (keys["w"]){
@@ -99,11 +141,13 @@ function update(dt) {
     }
   }
   for (let e of enemies) {
-    let dx = player.x - e.x;
-    let dy = player.y - e.y;
+    const playerCenterX = player.x + player.collisionSize / 2;
+    const playerCenterY = player.y + player.collisionSize / 2;
 
+    let dx = playerCenterX - e.x;
+    let dy = playerCenterY - e.y;
     let dist = Math.sqrt(dx * dx + dy * dy);
-
+    
     if (dist > 0) {
       e.x += (dx / dist) * e.speed;
       e.y += (dy / dist) * e.speed;
@@ -113,12 +157,19 @@ function update(dt) {
       e.hurtTimer += dt;
     }
     if( dist < player.auraRadius && e.hurtTimer > 0.5 ){
-      console.log(e.health, e.hurtTimer);
-      e.health -= 5;
+      e.health -= player.damage + (player.damage / 20) * player.level;
       e.hurtTimer = 0;
     }
     if(dist > player.auraRadius){
       e.hurtTimer = 0;
+    }
+    if(e.health <= 0){
+      spawnCoin(e.x, e.y);
+    }
+    if(player.exp == player.expThreshold){
+      player.level += 1;
+      player.exp = 0;
+      player.expThreshold += 20;
     }
     if (isColliding(player, e)){
       gameOver = true;
@@ -131,7 +182,12 @@ function update(dt) {
     spawnCoin();
     coinTimer = 0;
   }
-  if (enemySpawnTimer > 10) {
+  const minSpawnTime = 1.5;
+  const maxSpawnTime = 10;
+
+  const spawnInterval = minSpawnTime + (maxSpawnTime - minSpawnTime) / (1 + player.level);
+
+  if (enemySpawnTimer > spawnInterval) {
     spawnEnemy();
     enemySpawnTimer = 0;
   }
@@ -139,8 +195,39 @@ function update(dt) {
     if (isColliding(player, coins[i])) {
       coins.splice(i, 1);
       score++;
+      player.exp+=10
+      console.log(player.exp)
     }
   }
+  for (let p of projectiles) {
+    p.x += p.dx * p.speed;
+    p.y += p.dy * p.speed;
+  }
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    let p = projectiles[i];
+
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      let e = enemies[j];
+
+      if (
+        p.x < e.x + e.size &&
+        p.x + p.size > e.x &&
+        p.y < e.y + e.size &&
+        p.y + p.size > e.y
+      ) {
+        e.health -= p.damage;
+        e.hurtTimer = 1
+        projectiles.splice(i, 1);
+        break;
+      }
+    }
+  }
+  projectiles = projectiles.filter(p =>
+    p.x > 0 &&
+    p.x < canvas.width &&
+    p.y > 0 &&
+    p.y < canvas.height
+  );
 }
 
 
@@ -148,16 +235,17 @@ function draw() {
 ctx.fillStyle = grassPattern;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const centerX = player.x + player.size / 2;
-  const centerY = player.y + player.size / 2;
+  const centerX = player.x + player.collisionSize / 2;
+  const centerY = player.y + player.collisionSize / 2;
 
   ctx.beginPath();
-  ctx.arc(centerX, centerY, 150, 0, Math.PI * 2); 
+  ctx.arc(centerX, centerY, player.auraRadius, 0, Math.PI * 2); 
 
   ctx.fillStyle = "rgba(0, 255, 0, 0.2)"; 
   ctx.fill();
   ctx.closePath();
-  ctx.drawImage(playerImg, player.x, player.y, player.size, player.size);
+  const offset = (player.size - player.collisionSize) / 2;
+  ctx.drawImage(playerImg, player.x-offset, player.y-offset, player.size, player.size);
 
   ctx.fillStyle = "blue";
   for (let e of enemies) {
@@ -172,6 +260,12 @@ ctx.fillStyle = grassPattern;
 
   ctx.fillStyle = "white";
   ctx.fillText("Score: " + score, 20, 30);
+  ctx.fillStyle = "white";
+  ctx.fillText("level: " + player.level, 70, 30);
+  ctx.fillStyle = "red";
+  for (let p of projectiles) {
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+  }
   if (gameOver) {
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
