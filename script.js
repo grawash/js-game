@@ -30,8 +30,13 @@ let deltaTime = 0;
 let score = 0;
 let gameOver = false;
 const playerImg = new Image();
-playerImg.src = "Sprite-0001.png";
-
+const coinImg = new Image();
+playerImg.src = "Sprite-0002.png";
+const imgFront = "Sprite-0002.png"
+const imgRight = "Sprite-0003.png"
+const imgLeft = "Sprite-0004.png"
+const imgBack = "Sprite-0005.png"
+coinImg.src = "coin.png"
 window.addEventListener("keydown", e => keys[e.key] = true);
 window.addEventListener("keyup", e => keys[e.key] = false);
 
@@ -45,7 +50,7 @@ const player = {
   x: 200,
   y: 200,
   size: 100,
-  collisionSize: 75,
+  collisionSize: 60,
   auraRadius: 200,
   damage:10,
   exp: 0,
@@ -70,7 +75,7 @@ function spawnCoin(x = 0, y = 0) {
   coins.push({
     x: x ? x : Math.random() * canvas.width,
     y: y ? y : Math.random() * canvas.height,
-    size: 10
+    size: 15
   });
 }
 function isColliding(a, b) {
@@ -113,6 +118,7 @@ function shoot(e) {
 function update(dt) {
   if (gameOver) return
   if (keys["w"]){
+    playerImg.src = imgBack;
     if (player.y > 0 ){
         player.y -= player.speed;
     } else {
@@ -120,6 +126,7 @@ function update(dt) {
     }
   } 
   if (keys["s"]){
+    playerImg.src = imgFront;
     if (player.y < canvas.height - player.size){
         player.y += player.speed;
     } else {        
@@ -127,6 +134,7 @@ function update(dt) {
     }
   }
   if (keys["a"]){
+    playerImg.src = imgLeft;
     if (player.x > 0){
       player.x -= player.speed;
     } else {
@@ -134,6 +142,7 @@ function update(dt) {
     }
   }
   if (keys["d"]){
+    playerImg.src = imgRight;
     if( player.x < canvas.width - player.size){
       player.x += player.speed
     } else{
@@ -253,9 +262,8 @@ ctx.fillStyle = grassPattern;
     ctx.fillRect(e.x, e.y, e.size, e.size);
   }
   
-  ctx.fillStyle = "gold";
   for (let c of coins) {
-    ctx.fillRect(c.x, c.y, c.size, c.size);
+    ctx.drawImage(coinImg, c.x, c.y, c.size, c.size);
   }
 
   ctx.fillStyle = "white";
