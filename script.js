@@ -23,6 +23,8 @@ let enemies = [];
 const coins = [];
 const weapons = ["aura", "gun"];
 let projectiles = [];
+const trees = [];
+const footsteps = [];
 let coinTimer = 0;
 let enemySpawnTimer = 0;
 let lastTime = 0;
@@ -32,6 +34,8 @@ let gameOver = false;
 const playerImg = new Image();
 const coinImg = new Image();
 const shuriken = new Image();
+const treeImg = new Image();
+treeImg.src = "tree.png";
 shuriken.src = "shuriken.png";
 playerImg.src = "Sprite-0002.png";
 const imgFront = "Sprite-0002.png"
@@ -68,7 +72,7 @@ const player = {
   x: 200,
   y: 200,
   size: 100,
-  collisionSize: 60,
+  collisionSize: 50,
   auraRadius: 200,
   damage:10,
   exp: 0,
@@ -95,6 +99,27 @@ function spawnEnemy(){
     currentFrame: 0,
     frameTime: 0
   })
+}
+
+function spawnTree(){
+  trees.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    height: 150,
+    width: 80,
+
+    trunkOffsetX: 20,
+    trunkWidth: 20,
+    trunkHeight: 40
+  })
+}
+function isCollidingRect(a, b) {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.collisionSize > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.collisionSize > b.y
+  );
 }
 function spawnCoin(x = 0, y = 0) {
   coins.push({
@@ -143,7 +168,8 @@ function shoot(e) {
 function update(dt) {
   if (gameOver) return
   let moving = false;
-
+  let prevX = player.x;
+  let prevY = player.y;
   if (keys["w"]) {
     player.y = player.y > 0 ? player.y - player.speed : canvas.height - player.size;
     player.direction = "back";
@@ -172,6 +198,18 @@ function update(dt) {
       player.frameTime = 0;
       player.currentFrame = player.currentFrame === 0 ? 1 : 0;
     }
+    if (!player.footstepTimer) player.footstepTimer = 0;
+    player.footstepTimer += dt;
+
+    if (player.footstepTimer > 0.1) {
+      player.footstepTimer = 0;
+
+      footsteps.push({
+        x: player.x + player.collisionSize / 2,
+        y: player.y + player.collisionSize,
+        life: 1
+      });
+    }
   } else {
     player.currentFrame = 0;
   }
@@ -187,6 +225,23 @@ function update(dt) {
   }
   if (player.direction === "right") {
     playerImg.src = player.currentFrame === 0 ? imgRight1 : imgRight2;
+  }
+
+
+
+  for (let t of trees) {
+    const trunk = {
+      x: t.x + t.trunkOffsetX,
+      y: t.y + t.height - t.trunkHeight,
+      width: t.trunkWidth,
+      height: t.trunkHeight
+    };
+
+    if (isCollidingRect(player, trunk)) {
+      player.x = prevX;
+      player.y = prevY;
+      break;
+    }
   }
   for (let e of enemies) {
     const playerCenterX = player.x + player.collisionSize / 2;
@@ -227,6 +282,15 @@ function update(dt) {
     }
     if (e.hurtTime > 0) {
       e.hurtTime -= dt;
+    }
+    for (let f of footsteps) {
+      f.life -= dt;
+    }
+
+    for (let i = footsteps.length - 1; i >= 0; i--) {
+      if (footsteps[i].life <= 0) {
+        footsteps.splice(i, 1);
+      }
     }
     if (isColliding(player, e)){
       gameOver = true;
@@ -289,46 +353,72 @@ function update(dt) {
 
 
 function draw() {
-ctx.fillStyle = grassPattern;
+  ctx.fillStyle = grassPattern;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const centerX = player.x + player.collisionSize / 2;
   const centerY = player.y + player.collisionSize / 2;
 
   ctx.beginPath();
-  ctx.arc(centerX, centerY, player.auraRadius, 0, Math.PI * 2); 
-
-  ctx.fillStyle = "rgba(0, 255, 0, 0.2)"; 
+  ctx.arc(centerX, centerY, player.auraRadius, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0, 255, 0, 0.2)";
   ctx.fill();
   ctx.closePath();
+
   const offset = (player.size - player.collisionSize) / 2;
-  ctx.drawImage(playerImg, player.x-offset, player.y-offset, player.size, player.size);
+
+  const renderables = [];
+
+  renderables.push({
+    type: "player",
+    y: player.y + player.collisionSize,
+    draw: () => ctx.drawImage(playerImg, player.x - offset, player.y - offset, player.size, player.size)
+  });
+  for (let f of footsteps) {
+  ctx.globalAlpha = f.life;
+  ctx.fillStyle = "black";
+  ctx.beginPath();
+  ctx.arc(f.x, f.y, 4, 0, Math.PI * 2);
+  ctx.fill();
+  }
+  ctx.globalAlpha = 1;
 
   for (let e of enemies) {
-    //ctx.fillStyle = e.hurtTimer > 0.25 ? "white" : "blue";
-    let img;
+    let img = e.hurtTime > 0 ? enemyHurtImg : (e.frame === 0 ? enemyImg1 : enemyImg2);
 
-    if (e.hurtTime > 0) {
-      img = enemyHurtImg;
-    } else {
-      img = e.frame === 0 ? enemyImg1 : enemyImg2;
-    }
-
-    ctx.drawImage(img, e.x, e.y, e.size, e.size);
-    //ctx.drawImage(enemyImg, e.x, e.y, e.size, e.size);
+    renderables.push({
+      type: "enemy",
+      y: e.y + e.size,
+      draw: () => ctx.drawImage(img, e.x, e.y, e.size, e.size)
+    });
   }
-  
+
+  for (let t of trees) {
+    renderables.push({
+      type: "tree",
+      y: t.y + t.height,
+      draw: () => ctx.drawImage(treeImg, t.x, t.y, t.width, t.height)
+    });
+  }
+
+  renderables.sort((a, b) => a.y - b.y);
+
+  for (let r of renderables) {
+    r.draw();
+  }
+
   for (let c of coins) {
     ctx.drawImage(coinImg, c.x, c.y, c.size, c.size);
   }
 
-  ctx.fillStyle = "white";
-  ctx.fillText("Score: " + score, 20, 30);
-  ctx.fillStyle = "white";
-  ctx.fillText("level: " + player.level, 70, 30);
   for (let p of projectiles) {
     ctx.drawImage(shuriken, p.x, p.y, p.size, p.size);
   }
+
+  ctx.fillStyle = "white";
+  ctx.fillText("Score: " + score, 20, 30);
+  ctx.fillText("level: " + player.level, 70, 30);
+
   if (gameOver) {
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -348,4 +438,5 @@ function gameLoop(time = 0) {
 }
 spawnEnemy();
 for (let i = 0; i < 5; i++) spawnCoin();;
+for (let i = 0; i < 12; i++) spawnTree();;
 gameLoop();
