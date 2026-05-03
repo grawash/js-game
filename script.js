@@ -31,12 +31,30 @@ let score = 0;
 let gameOver = false;
 const playerImg = new Image();
 const coinImg = new Image();
+const shuriken = new Image();
+shuriken.src = "shuriken.png";
 playerImg.src = "Sprite-0002.png";
 const imgFront = "Sprite-0002.png"
-const imgRight = "Sprite-0003.png"
-const imgLeft = "Sprite-0004.png"
-const imgBack = "Sprite-0005.png"
+const imgFrontRun1 = "Sprite-0003.png"
+const imgFrontRun2 = "Sprite-0004.png"
+const imgRight1 = "Sprite-0005.png"
+const imgRight2 = "Sprite-0006.png"
+const imgLeft1 = "Sprite-0007.png"
+const imgLeft2 = "Sprite-0008.png"
+const imgBack = "Sprite-0009.png"
+const imgBackRun1 = "Sprite-0010.png"
+const imgBackRun2 = "Sprite-0011.png"
 coinImg.src = "coin.png"
+const enemyImg1 = new Image();
+enemyImg1.src = "enemy1.png";
+const enemyImg2 = new Image();
+enemyImg2.src = "enemy2.png";
+const enemyHurtImg = new Image();
+enemyHurtImg.src = "enemy3.png";
+
+
+
+
 window.addEventListener("keydown", e => keys[e.key] = true);
 window.addEventListener("keyup", e => keys[e.key] = false);
 
@@ -58,7 +76,9 @@ const player = {
   level: 1,
   weapon: "aura",
   firing: false,
-  speed: 2
+  speed: 2,
+  frameTime: 0,
+  currentFrame: 0
 };
 
 function spawnEnemy(){
@@ -67,8 +87,13 @@ function spawnEnemy(){
     y: Math.random() * canvas.height,
     health: 100,
     hurtTimer: 0,
-    size: 20,
-    speed: 0.5
+    hurtTime: 0,
+    size: 30,
+    speed: 0.5,
+    spriteTimer: 0,
+    direction: "front",
+    currentFrame: 0,
+    frameTime: 0
   })
 }
 function spawnCoin(x = 0, y = 0) {
@@ -110,44 +135,58 @@ function shoot(e) {
     dx: dx,
     dy: dy,
     speed: 6,
-    size: 8,
+    size: 15,
     damage: 25
   });
 }
 
 function update(dt) {
   if (gameOver) return
-  if (keys["w"]){
-    playerImg.src = imgBack;
-    if (player.y > 0 ){
-        player.y -= player.speed;
-    } else {
-        player.y = canvas.height - player.size;
-    }
-  } 
-  if (keys["s"]){
-    playerImg.src = imgFront;
-    if (player.y < canvas.height - player.size){
-        player.y += player.speed;
-    } else {        
-      player.y = 0;
-    }
+  let moving = false;
+
+  if (keys["w"]) {
+    player.y = player.y > 0 ? player.y - player.speed : canvas.height - player.size;
+    player.direction = "back";
+    moving = true;
   }
-  if (keys["a"]){
-    playerImg.src = imgLeft;
-    if (player.x > 0){
-      player.x -= player.speed;
-    } else {
-      player.x = canvas.width - player.size;
-    }
+  if (keys["s"]) {
+    player.y = player.y < canvas.height - player.size ? player.y + player.speed : 0;
+    player.direction = "front";
+    moving = true;
   }
-  if (keys["d"]){
-    playerImg.src = imgRight;
-    if( player.x < canvas.width - player.size){
-      player.x += player.speed
-    } else{
-      player.x = 0;
+  if (keys["a"]) {
+    player.x = player.x > 0 ? player.x - player.speed : canvas.width - player.size;
+    player.direction = "left";
+    moving = true;
+  }
+  if (keys["d"]) {
+    player.x = player.x < canvas.width - player.size ? player.x + player.speed : 0;
+    player.direction = "right";
+    moving = true;
+  }
+
+  if (moving) {
+    player.frameTime += dt;
+
+    if (player.frameTime > 0.3) {
+      player.frameTime = 0;
+      player.currentFrame = player.currentFrame === 0 ? 1 : 0;
     }
+  } else {
+    player.currentFrame = 0;
+  }
+
+  if (player.direction === "front") {
+    playerImg.src = player.currentFrame === 0 ? imgFrontRun1 : imgFrontRun2;
+  }
+  if (player.direction === "back") {
+    playerImg.src = player.currentFrame === 0 ? imgBackRun1 : imgBackRun2;
+  }
+  if (player.direction === "left") {
+    playerImg.src = player.currentFrame === 0 ? imgLeft1 : imgLeft2;
+  }
+  if (player.direction === "right") {
+    playerImg.src = player.currentFrame === 0 ? imgRight1 : imgRight2;
   }
   for (let e of enemies) {
     const playerCenterX = player.x + player.collisionSize / 2;
@@ -165,12 +204,18 @@ function update(dt) {
     if (dist < player.auraRadius ) {
       e.hurtTimer += dt;
     }
-    if( dist < player.auraRadius && e.hurtTimer > 0.5 ){
+    if( dist < player.auraRadius && e.hurtTimer > 0.3 ){
       e.health -= player.damage + (player.damage / 20) * player.level;
+      e.hurtTime = 0.3;
       e.hurtTimer = 0;
     }
     if(dist > player.auraRadius){
       e.hurtTimer = 0;
+    }
+    e.spriteTimer += dt;
+    if(e.spriteTimer > 0.5){
+      e.frame === 0 ? e.frame = 1 : e.frame = 0;
+      e.spriteTimer = 0;
     }
     if(e.health <= 0){
       spawnCoin(e.x, e.y);
@@ -179,6 +224,9 @@ function update(dt) {
       player.level += 1;
       player.exp = 0;
       player.expThreshold += 20;
+    }
+    if (e.hurtTime > 0) {
+      e.hurtTime -= dt;
     }
     if (isColliding(player, e)){
       gameOver = true;
@@ -225,7 +273,7 @@ function update(dt) {
         p.y + p.size > e.y
       ) {
         e.health -= p.damage;
-        e.hurtTimer = 1
+        e.hurtTime = 0.3;
         projectiles.splice(i, 1);
         break;
       }
@@ -256,10 +304,18 @@ ctx.fillStyle = grassPattern;
   const offset = (player.size - player.collisionSize) / 2;
   ctx.drawImage(playerImg, player.x-offset, player.y-offset, player.size, player.size);
 
-  ctx.fillStyle = "blue";
   for (let e of enemies) {
-    ctx.fillStyle = e.hurtTimer > 0.25 ? "white" : "blue";
-    ctx.fillRect(e.x, e.y, e.size, e.size);
+    //ctx.fillStyle = e.hurtTimer > 0.25 ? "white" : "blue";
+    let img;
+
+    if (e.hurtTime > 0) {
+      img = enemyHurtImg;
+    } else {
+      img = e.frame === 0 ? enemyImg1 : enemyImg2;
+    }
+
+    ctx.drawImage(img, e.x, e.y, e.size, e.size);
+    //ctx.drawImage(enemyImg, e.x, e.y, e.size, e.size);
   }
   
   for (let c of coins) {
@@ -270,9 +326,8 @@ ctx.fillStyle = grassPattern;
   ctx.fillText("Score: " + score, 20, 30);
   ctx.fillStyle = "white";
   ctx.fillText("level: " + player.level, 70, 30);
-  ctx.fillStyle = "red";
   for (let p of projectiles) {
-    ctx.fillRect(p.x, p.y, p.size, p.size);
+    ctx.drawImage(shuriken, p.x, p.y, p.size, p.size);
   }
   if (gameOver) {
     ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
